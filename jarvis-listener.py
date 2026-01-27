@@ -36,6 +36,12 @@ try:
 except ImportError:
     ELEVENLABS_AVAILABLE = False
 
+try:
+    from fish_audio_sdk import Session, TTSRequest
+    FISH_AUDIO_AVAILABLE = True
+except ImportError:
+    FISH_AUDIO_AVAILABLE = False
+
 # Import JARVIS LLM
 try:
     from utilities.llm import get_llm
@@ -65,7 +71,16 @@ class JarvisListener:
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source, duration=2)
 
-        # ElevenLabs client
+        # Fish Audio client (primary - JARVIS voice)
+        self.fish_session = None
+        if FISH_AUDIO_AVAILABLE and FISH_AUDIO_API:
+            try:
+                self.fish_session = Session(FISH_AUDIO_API)
+                print("Fish Audio voice loaded.")
+            except Exception as e:
+                print(f"Fish Audio init error: {e}")
+
+        # ElevenLabs client (backup)
         if ELEVENLABS_AVAILABLE and ELEVENLABS_API_KEY:
             self.voice_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
         else:
@@ -74,10 +89,28 @@ class JarvisListener:
         print("JARVIS ready. Listening for wake word...")
 
     def speak(self, text):
-        """Speak text using British JARVIS voice."""
+        """Speak text using JARVIS voice. Priority: Fish Audio > ElevenLabs > macOS."""
         if not text:
             return
 
+        # Try Fish Audio first (primary JARVIS voice)
+        if self.fish_session:
+            try:
+                with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+                    for chunk in self.fish_session.tts(TTSRequest(
+                        reference_id=FISH_AUDIO_ID,
+                        text=text
+                    )):
+                        f.write(chunk)
+                    temp_path = f.name
+
+                os.system(f'afplay "{temp_path}" 2>/dev/null')
+                os.remove(temp_path)
+                return
+            except Exception as e:
+                print(f"Fish Audio error: {e}")
+
+        # Fallback to ElevenLabs
         if self.voice_client:
             try:
                 audio = self.voice_client.text_to_speech.convert(
@@ -99,13 +132,13 @@ class JarvisListener:
 
                 os.system(f'afplay "{temp_path}" 2>/dev/null')
                 os.remove(temp_path)
+                return
             except Exception as e:
-                print(f"Voice error: {e}")
-                # Fallback to macOS say
-                os.system(f'say -v Daniel "{text}"')
-        else:
-            # Fallback to macOS say
-            os.system(f'say -v Daniel "{text}"')
+                print(f"ElevenLabs error: {e}")
+
+        # Final fallback to macOS say
+        text_escaped = text.replace('"', '\\"')
+        os.system(f'say -v Daniel "{text_escaped}"')
 
     def play_back_in_black(self):
         """Play Back in Black intro for daddy's home."""
