@@ -239,9 +239,25 @@ class Plugin(pluginmanager.IPlugin, PluginStorage):
             if self.is_callable_plugin():
                 self._backend[0](jarvis.get_api(), s)
             else:
-                jarvis.get_api().say("Sorry, I could not recognise your command. Did you mean:")
-                for sub_command in self._sub_plugins:
-                    jarvis.get_api().say(f"    * {self.get_name()} {sub_command}")
+                # Fall back to AI - JARVIS knows everything
+                original_input = getattr(jarvis, '_last_raw_input', f"{self.get_name()} {s}")
+                try:
+                    from utilities.llm import get_llm
+                    from colorama import Fore
+                    llm = get_llm()
+                    if llm.is_available():
+                        print(Fore.CYAN, end='', flush=True)
+                        for chunk in llm.ask(original_input, stream=True):
+                            print(chunk, end='', flush=True)
+                        print(Fore.RESET)
+                    else:
+                        jarvis.get_api().say("Sorry, I could not recognise your command. Did you mean:")
+                        for sub_command in self._sub_plugins:
+                            jarvis.get_api().say(f"    * {self.get_name()} {sub_command}")
+                except Exception:
+                    jarvis.get_api().say("Sorry, I could not recognise your command. Did you mean:")
+                    for sub_command in self._sub_plugins:
+                        jarvis.get_api().say(f"    * {self.get_name()} {sub_command}")
         else:
             command = sub_command.split()[0]
             new_s = " ".join(sub_command.split()[1:])

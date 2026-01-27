@@ -8,6 +8,7 @@ import sys
 import tempfile
 from utilities.GeneralUtilities import print_say
 from CmdInterpreter import CmdInterpreter
+from utilities.llm import get_llm
 
 # register hist path
 HISTORY_FILENAME = tempfile.TemporaryFile('w+t')
@@ -78,11 +79,43 @@ class Jarvis(CmdInterpreter, object):
         return dirs_abs
 
     def default(self, data):
-        """Jarvis let's you know if an error has occurred."""
-        print_say("I could not identify your command...", self, Fore.MAGENTA)
+        """
+        When no plugin matches, Jarvis uses AI to answer.
+        He just knows ball - answers anything instantly.
+        """
+        # Get the original input (data might be "None" if parsing failed)
+        original_input = getattr(self, '_last_raw_input', data)
+        if data == "None" or not data.strip():
+            original_input = getattr(self, '_last_raw_input', '')
+
+        if not original_input or original_input.strip() == '':
+            print_say("I could not identify your command...", self, Fore.MAGENTA)
+            return
+
+        # Use LLM to answer
+        llm = get_llm()
+        if llm.is_available():
+            # Stream response for instant feel
+            print(Fore.CYAN, end='', flush=True)
+            full_response = ""
+            for chunk in llm.ask(original_input, stream=True):
+                print(chunk, end='', flush=True)
+                full_response += chunk
+            print(Fore.RESET)
+
+            # Speak the response if voice is enabled
+            if self.enable_voice and full_response:
+                self.speak(full_response)
+        else:
+            # Fallback if no API key
+            print_say("I don't have an AI brain configured yet.", self, Fore.MAGENTA)
+            print_say("Set ANTHROPIC_API_KEY or OPENAI_API_KEY to enable AI.", self, Fore.YELLOW)
 
     def precmd(self, line):
         """Hook that executes before every command."""
+        # Store original input for AI fallback
+        self._last_raw_input = line
+
         words = line.split()
         HISTORY_FILENAME.write(line + '\n')
 
