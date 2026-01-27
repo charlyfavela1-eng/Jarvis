@@ -1,10 +1,10 @@
 #!/bin/bash
-# JARVIS Daemon - Runs in background, survives terminal close
+# JARVIS Daemon - Voice-activated, always listening
 # Usage: ./jarvis-daemon.sh start|stop|status
 
 JARVIS_DIR="/Users/michaelcaneyjr/Jarvis"
-PID_FILE="/tmp/jarvis.pid"
-LOG_FILE="/tmp/jarvis.log"
+PID_FILE="/tmp/jarvis-listener.pid"
+LOG_FILE="/tmp/jarvis-listener.log"
 
 # Load environment
 source ~/.zshrc 2>/dev/null
@@ -15,20 +15,27 @@ start_jarvis() {
         return
     fi
 
-    echo "Starting JARVIS daemon..."
+    echo "Starting JARVIS voice listener..."
+    echo "Wake words: 'Jarvis', 'Hey Jarvis'"
+    echo "Special: 'Daddy's home' (plays Back in Black)"
 
     cd "$JARVIS_DIR"
     source env/bin/activate
-    export PYTHONPATH="$JARVIS_DIR:$PYTHONPATH"
+    export PYTHONPATH="$JARVIS_DIR:$JARVIS_DIR/jarviscli:$PYTHONPATH"
+    export ELEVENLABS_API_KEY="${ELEVENLABS_API_KEY}"
+    export SHODAN_API_KEY="${SHODAN_API_KEY}"
 
-    # Run JARVIS in background with nohup
-    nohup python jarviscli >> "$LOG_FILE" 2>&1 &
+    # Run JARVIS listener in background
+    nohup python3 jarvis-listener.py >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
 
-    sleep 2
+    sleep 3
     if kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-        echo "JARVIS is now running (PID: $(cat $PID_FILE))"
+        echo "JARVIS is now listening (PID: $(cat $PID_FILE))"
         echo "Log file: $LOG_FILE"
+        echo ""
+        echo "Say 'Jarvis' or 'Hey Jarvis' to activate."
+        echo "Say 'Daddy's home' for the special entrance."
     else
         echo "Failed to start JARVIS"
         rm -f "$PID_FILE"
@@ -54,7 +61,8 @@ stop_jarvis() {
 
 status_jarvis() {
     if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-        echo "JARVIS is running (PID: $(cat $PID_FILE))"
+        echo "JARVIS is listening (PID: $(cat $PID_FILE))"
+        echo "Say 'Jarvis' to activate."
     else
         echo "JARVIS is not running"
     fi
@@ -75,8 +83,11 @@ case "$1" in
         sleep 1
         start_jarvis
         ;;
+    log)
+        tail -f "$LOG_FILE"
+        ;;
     *)
-        echo "Usage: $0 {start|stop|status|restart}"
+        echo "Usage: $0 {start|stop|status|restart|log}"
         exit 1
         ;;
 esac
