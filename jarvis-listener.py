@@ -19,8 +19,6 @@ os.chdir('/Users/michaelcaneyjr/Jarvis')
 # Load environment
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', 'sk_9dd7ba5d73c9b50c8a37b295f5b0d872f0a6ebb4c24bf7eb')
 SHODAN_API_KEY = os.environ.get('SHODAN_API_KEY', 'uJSeUuGvN4aEhVwCJzDMEQimOD8jZLkJ')
-FISH_AUDIO_ID = '612b878b113047d9a770c069c8b4fdfe'
-FISH_AUDIO_API = '574a5b650858441da6e1280ee82a1401'
 
 # Try imports
 try:
@@ -36,12 +34,6 @@ try:
 except ImportError:
     ELEVENLABS_AVAILABLE = False
 
-try:
-    from fish_audio_sdk import Session, TTSRequest
-    FISH_AUDIO_AVAILABLE = True
-except ImportError:
-    FISH_AUDIO_AVAILABLE = False
-
 # Import JARVIS LLM
 try:
     from utilities.llm import get_llm
@@ -55,9 +47,9 @@ class JarvisListener:
     """Always-on JARVIS listener with wake word detection."""
 
     WAKE_WORDS = ['jarvis', 'hey jarvis', 'yo jarvis', 'ok jarvis']
-    SPECIAL_WAKE = ["daddy's home", "daddys home", "daddy is home"]
+    SPECIAL_WAKE = ["daddy's home", "daddys home", "daddy is home", "wake up daddys home", "wake up daddy's home"]
 
-    # British Daniel voice on ElevenLabs
+    # British Daniel voice on ElevenLabs - THE ONLY JARVIS VOICE
     VOICE_ID = 'onwK4e9ZLuTAKqWW03F9'
 
     def __init__(self):
@@ -71,46 +63,22 @@ class JarvisListener:
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source, duration=2)
 
-        # Fish Audio client (primary - JARVIS voice)
-        self.fish_session = None
-        if FISH_AUDIO_AVAILABLE and FISH_AUDIO_API:
-            try:
-                self.fish_session = Session(FISH_AUDIO_API)
-                print("Fish Audio voice loaded.")
-            except Exception as e:
-                print(f"Fish Audio init error: {e}")
-
-        # ElevenLabs client (backup)
+        # ElevenLabs client - PRIMARY JARVIS VOICE
+        self.voice_client = None
         if ELEVENLABS_AVAILABLE and ELEVENLABS_API_KEY:
             self.voice_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+            print("ElevenLabs JARVIS voice loaded.")
         else:
-            self.voice_client = None
+            print("WARNING: ElevenLabs not available, using macOS fallback")
 
         print("JARVIS ready. Listening for wake word...")
 
     def speak(self, text):
-        """Speak text using JARVIS voice. Priority: Fish Audio > ElevenLabs > macOS."""
+        """Speak text using ElevenLabs JARVIS voice (British Daniel)."""
         if not text:
             return
 
-        # Try Fish Audio first (primary JARVIS voice)
-        if self.fish_session:
-            try:
-                with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
-                    for chunk in self.fish_session.tts(TTSRequest(
-                        reference_id=FISH_AUDIO_ID,
-                        text=text
-                    )):
-                        f.write(chunk)
-                    temp_path = f.name
-
-                os.system(f'afplay "{temp_path}" 2>/dev/null')
-                os.remove(temp_path)
-                return
-            except Exception as e:
-                print(f"Fish Audio error: {e}")
-
-        # Fallback to ElevenLabs
+        # ElevenLabs - THE ONLY JARVIS VOICE
         if self.voice_client:
             try:
                 audio = self.voice_client.text_to_speech.convert(
@@ -136,7 +104,7 @@ class JarvisListener:
             except Exception as e:
                 print(f"ElevenLabs error: {e}")
 
-        # Final fallback to macOS say
+        # Emergency fallback to macOS (only if ElevenLabs completely fails)
         text_escaped = text.replace('"', '\\"')
         os.system(f'say -v Daniel "{text_escaped}"')
 
