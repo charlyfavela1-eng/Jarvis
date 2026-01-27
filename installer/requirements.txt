@@ -55,3 +55,4 @@ pyenchant
 halo
 openai
 anthropic
+elevenlabs
