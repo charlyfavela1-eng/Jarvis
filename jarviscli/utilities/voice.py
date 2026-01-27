@@ -36,7 +36,8 @@ def create_voice(self, gtts_status, rate=180):
         return VoiceGTTS()
     else:
         if IS_MACOS:
-            return VoiceMac()
+            # Use Daniel (British voice) for JARVIS personality
+            return VoiceMac(voice="Daniel", rate=rate)
         elif IS_WIN:
             return VoiceWin(rate)
         else:
@@ -79,10 +80,17 @@ class VoiceGTTS():
 
 
 class VoiceMac():
+    def __init__(self, voice="Daniel", rate=180):
+        # Daniel is the British English voice - perfect for JARVIS
+        self.voice = voice
+        self.rate = rate
+
     def text_to_speech(self, speech):
         speech = remove_ansi_escape_seq(speech)
         speech = speech.replace("'", "\\'")
-        system('say $\'{}\''.format(speech))
+        speech = speech.replace('"', '\\"')
+        # Use Daniel voice with specified rate for JARVIS-like speech
+        system(f'say -v {self.voice} -r {self.rate} $\'{speech}\'')
 
 
 class Voice_general():
