@@ -74,20 +74,19 @@ def create_voice(self, gtts_status, rate=180):
 class VoiceElevenLabs:
     """
     ElevenLabs voice - Movie-quality JARVIS voice.
-    Uses "Antoni" voice which sounds sophisticated and British.
+    Uses "Daniel" - British, formal, steady broadcaster. Just like Paul Bettany.
     """
 
-    # Antoni - sophisticated British male voice, closest to JARVIS
-    # Alternative: "Daniel" (21m00Tcm4TlvDq8ikWAM) - British narrator
-    JARVIS_VOICE_ID = "ErXwobaYiN019PkySvjV"  # Antoni
+    # Daniel - British accent, formal, steady broadcaster - perfect JARVIS voice
+    JARVIS_VOICE_ID = "onwK4e9ZLuTAKqWW03F9"  # Daniel (British)
 
     def __init__(self, api_key=None):
         self.api_key = api_key or os.environ.get("ELEVENLABS_API_KEY")
         self.client = ElevenLabs(api_key=self.api_key)
         self.voice_settings = VoiceSettings(
-            stability=0.75,        # More stable, consistent
-            similarity_boost=0.75, # Sound like the voice
-            style=0.5,             # Some expressiveness
+            stability=0.8,         # Very stable, consistent - like JARVIS
+            similarity_boost=0.8,  # Sound like the voice
+            style=0.3,             # Subtle expressiveness - calm and collected
             use_speaker_boost=True
         )
 

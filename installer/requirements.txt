@@ -56,3 +56,4 @@ halo
 openai
 anthropic
 elevenlabs
+shodan

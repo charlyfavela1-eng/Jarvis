@@ -135,7 +135,9 @@ MENTALITY
 try:
     from utilities.realtime import (
         get_weather, get_news, format_weather_context,
-        format_news_context, detect_query_type, extract_location
+        format_news_context, detect_query_type, extract_location,
+        shodan_lookup_ip, shodan_lookup_domain, format_shodan_context,
+        detect_osint_query, extract_ip_from_query, extract_domain_from_query
     )
     REALTIME_AVAILABLE = True
 except ImportError:
@@ -143,9 +145,25 @@ except ImportError:
 
 
 def enrich_prompt_with_context(question):
-    """Add real-time data context if the question is about weather or news."""
+    """Add real-time data context if the question is about weather, news, or OSINT."""
     if not REALTIME_AVAILABLE:
         return question, None
+
+    # Check for OSINT/Shodan queries first
+    if detect_osint_query(question):
+        ip = extract_ip_from_query(question)
+        if ip:
+            shodan_data = shodan_lookup_ip(ip)
+            context = format_shodan_context(shodan_data)
+            enriched = f"{context}\n\nUser question: {question}"
+            return enriched, "osint"
+
+        domain = extract_domain_from_query(question)
+        if domain:
+            shodan_data = shodan_lookup_domain(domain)
+            context = format_shodan_context(shodan_data)
+            enriched = f"{context}\n\nUser question: {question}"
+            return enriched, "osint"
 
     query_type = detect_query_type(question)
 
