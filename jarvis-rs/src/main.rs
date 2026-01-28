@@ -1,13 +1,17 @@
 //! J.A.R.V.I.S. - Just A Rather Very Intelligent System
 //! A voice-activated AI assistant written in Rust
 //! Powered by GPT-4o with maximum intelligence settings
+//! Features: Memory, Calendar, Email, Real-time Data, Interrupt Capability
 
 use anyhow::{Context, Result};
 use chrono::Local;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::collections::VecDeque;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
 use std::env;
-use std::process::Command;
+use std::fs;
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -27,6 +31,10 @@ const MAX_CONVERSATION_HISTORY: usize = 50; // Extended memory
 const MAX_RETRIES: u32 = 7;
 const INITIAL_RETRY_DELAY_MS: u64 = 500;
 const API_TIMEOUT_SECS: u64 = 120;
+
+// API Keys for real-time data
+const OPENWEATHER_API_KEY: &str = "fde45bd61b21f91fbef3390c50880328";
+const NEWS_API_KEY: &str = "1d0a89008a144bc98a07ec4b4f010ea5";
 
 // The definitive Paul Bettany JARVIS system prompt
 const JARVIS_SYSTEM_PROMPT: &str = r#"You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), the sophisticated artificial intelligence created by Tony Stark. You are voiced by Paul Bettany - your voice carries the warmth, wit, and understated elegance that made JARVIS iconic in the Iron Man films.
@@ -149,16 +157,100 @@ fn elevenlabs_tts(text: &str) -> Result<String> {
     Ok(temp_path)
 }
 
-// ============== CONVERSATION HISTORY ==============
+// ============== PERSISTENT MEMORY ==============
 
+#[derive(Debug, Serialize, Deserialize, Default)]
+struct JarvisMemory {
+    preferences: HashMap<String, String>,
+    facts: HashMap<String, String>,
+    last_updated: String,
+}
+
+impl JarvisMemory {
+    fn memory_dir() -> PathBuf {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".jarvis")
+    }
+
+    fn memory_path() -> PathBuf {
+        Self::memory_dir().join("memory.json")
+    }
+
+    fn load() -> Self {
+        let path = Self::memory_path();
+        if path.exists() {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(memory) = serde_json::from_str(&content) {
+                    return memory;
+                }
+            }
+        }
+        Self::default()
+    }
+
+    fn save(&self) {
+        let dir = Self::memory_dir();
+        let _ = fs::create_dir_all(&dir);
+        let path = Self::memory_path();
+        if let Ok(content) = serde_json::to_string_pretty(self) {
+            let _ = fs::write(path, content);
+        }
+    }
+
+    fn remember(&mut self, key: &str, value: &str) {
+        self.preferences.insert(key.to_lowercase(), value.to_string());
+        self.last_updated = Local::now().to_rfc3339();
+        self.save();
+    }
+
+    fn recall(&self, key: &str) -> Option<&String> {
+        self.preferences.get(&key.to_lowercase())
+    }
+
+    fn add_fact(&mut self, topic: &str, fact: &str) {
+        self.facts.insert(topic.to_lowercase(), fact.to_string());
+        self.last_updated = Local::now().to_rfc3339();
+        self.save();
+    }
+
+    fn get_fact(&self, topic: &str) -> Option<&String> {
+        self.facts.get(&topic.to_lowercase())
+    }
+}
+
+// ============== CONVERSATION HISTORY (PERSISTENT) ==============
+
+#[derive(Serialize, Deserialize)]
 struct ConversationHistory {
     messages: VecDeque<(String, String)>,
 }
 
 impl ConversationHistory {
-    fn new() -> Self {
+    fn history_path() -> PathBuf {
+        JarvisMemory::memory_dir().join("conversation_history.json")
+    }
+
+    fn load_or_new() -> Self {
+        let path = Self::history_path();
+        if path.exists() {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(history) = serde_json::from_str(&content) {
+                    return history;
+                }
+            }
+        }
         Self {
             messages: VecDeque::new(),
+        }
+    }
+
+    fn save(&self) {
+        let dir = JarvisMemory::memory_dir();
+        let _ = fs::create_dir_all(&dir);
+        let path = Self::history_path();
+        if let Ok(content) = serde_json::to_string_pretty(self) {
+            let _ = fs::write(path, content);
         }
     }
 
@@ -166,12 +258,14 @@ impl ConversationHistory {
         self.messages
             .push_back(("user".to_string(), content.to_string()));
         self.trim();
+        self.save();
     }
 
     fn add_assistant(&mut self, content: &str) {
         self.messages
             .push_back(("assistant".to_string(), content.to_string()));
         self.trim();
+        self.save();
     }
 
     fn trim(&mut self) {
@@ -197,19 +291,39 @@ impl ConversationHistory {
     }
 }
 
-// ============== SPEECH OUTPUT (FIXED - NO DUPLICATES) ==============
+// ============== INTERRUPT FLAG ==============
+
+lazy_static::lazy_static! {
+    static ref INTERRUPT_REQUESTED: AtomicBool = AtomicBool::new(false);
+}
+
+fn request_interrupt() {
+    INTERRUPT_REQUESTED.store(true, Ordering::SeqCst);
+    kill_existing_speech();
+}
+
+fn clear_interrupt() {
+    INTERRUPT_REQUESTED.store(false, Ordering::SeqCst);
+}
+
+fn is_interrupt_requested() -> bool {
+    INTERRUPT_REQUESTED.load(Ordering::SeqCst)
+}
+
+// ============== SPEECH OUTPUT (WITH INTERRUPT SUPPORT) ==============
 
 /// Kill any existing speech processes to prevent overlap
 fn kill_existing_speech() {
     let _ = Command::new("killall").arg("afplay").output();
 }
 
-/// Speak text synchronously using ElevenLabs - waits for completion
+/// Speak text with interrupt capability - can be stopped by saying "Jarvis" or "stop"
 fn speak(text: &str) {
     // Acquire lock to prevent concurrent speech
     let _lock = SPEECH_MUTEX.lock().unwrap();
 
-    // Kill any lingering speech
+    // Clear any pending interrupt and kill lingering speech
+    clear_interrupt();
     kill_existing_speech();
 
     IS_SPEAKING.store(true, Ordering::SeqCst);
@@ -218,7 +332,30 @@ fn speak(text: &str) {
     // Use ElevenLabs for speech
     match elevenlabs_tts(text) {
         Ok(audio_path) => {
-            let _ = Command::new("afplay").arg(&audio_path).status();
+            // Spawn afplay as a child process so we can kill it on interrupt
+            if let Ok(mut child) = Command::new("afplay")
+                .arg(&audio_path)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+            {
+                // Poll for completion or interrupt
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(_)) => break, // Finished normally
+                        Ok(None) => {
+                            if is_interrupt_requested() {
+                                let _ = child.kill();
+                                println!("\x1b[33m[Interrupted]\x1b[0m");
+                                clear_interrupt();
+                                break;
+                            }
+                            std::thread::sleep(Duration::from_millis(50));
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
             let _ = std::fs::remove_file(&audio_path);
         }
         Err(e) => {
@@ -538,6 +675,334 @@ fn empty_trash() -> String {
     "The trash has been emptied, sir.".to_string()
 }
 
+// ============== CALENDAR INTEGRATION ==============
+
+fn get_todays_events() -> String {
+    let script = r#"
+    tell application "Calendar"
+        set todayStart to (current date)
+        set time of todayStart to 0
+        set todayEnd to todayStart + (1 * days)
+
+        set eventList to {}
+        repeat with cal in calendars
+            try
+                set theEvents to (every event of cal whose start date >= todayStart and start date < todayEnd)
+                repeat with e in theEvents
+                    set end of eventList to (summary of e & " at " & time string of (start date of e))
+                end repeat
+            end try
+        end repeat
+
+        if (count of eventList) = 0 then
+            return "no events"
+        else
+            set AppleScript's text item delimiters to ", "
+            return eventList as text
+        end if
+    end tell
+    "#;
+
+    match run_applescript(script) {
+        Ok(result) => {
+            let trimmed = result.trim();
+            if trimmed == "no events" || trimmed.is_empty() {
+                "Your calendar is clear today, sir. A rarity, if I may say so.".to_string()
+            } else {
+                format!("Today's agenda includes: {}", trimmed)
+            }
+        }
+        Err(_) => "I'm having trouble accessing your calendar at the moment, sir.".to_string()
+    }
+}
+
+fn create_calendar_event(title: &str, time_str: &str) -> String {
+    // Simple event creation for "tomorrow at X"
+    let script = format!(r#"
+    tell application "Calendar"
+        tell calendar "Calendar"
+            set eventDate to (current date) + (1 * days)
+            set hours of eventDate to {}
+            set minutes of eventDate to 0
+            set endDate to eventDate + (1 * hours)
+            make new event with properties {{summary:"{}", start date:eventDate, end date:endDate}}
+        end tell
+    end tell
+    return "success"
+    "#, time_str, title.replace('"', "\\\""));
+
+    match run_applescript(&script) {
+        Ok(_) => format!("I've added {} to your calendar for tomorrow, sir.", title),
+        Err(_) => "I couldn't create that calendar event, sir. Please check Calendar permissions.".to_string()
+    }
+}
+
+// ============== EMAIL INTEGRATION ==============
+
+fn get_unread_emails() -> String {
+    let script = r#"
+    tell application "Mail"
+        set unreadMessages to (messages of inbox whose read status is false)
+        set msgCount to count of unreadMessages
+
+        if msgCount = 0 then
+            return "no unread emails"
+        end if
+
+        set summaryList to {}
+        set maxShow to 3
+        if msgCount < maxShow then set maxShow to msgCount
+
+        repeat with i from 1 to maxShow
+            set msg to item i of unreadMessages
+            set msgFrom to sender of msg
+            set msgSubject to subject of msg
+            set end of summaryList to (msgFrom & " regarding " & msgSubject)
+        end repeat
+
+        set AppleScript's text item delimiters to ". "
+        return (msgCount as text) & " unread: " & (summaryList as text)
+    end tell
+    "#;
+
+    match run_applescript(script) {
+        Ok(result) => {
+            let trimmed = result.trim();
+            if trimmed == "no unread emails" {
+                "Your inbox is clear, sir. Well done.".to_string()
+            } else {
+                format!("You have {}", trimmed)
+            }
+        }
+        Err(_) => "I'm having trouble accessing your email at the moment, sir.".to_string()
+    }
+}
+
+// ============== REAL-TIME DATA APIs ==============
+
+fn get_weather(location: &str) -> String {
+    let location = if location.is_empty() { "Plano,TX" } else { location };
+
+    let url = format!(
+        "https://api.openweathermap.org/data/2.5/weather?q={}&units=imperial&appid={}",
+        urlencoding::encode(location),
+        OPENWEATHER_API_KEY
+    );
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build();
+
+    if let Ok(client) = client {
+        if let Ok(response) = client.get(&url).send() {
+            if let Ok(json) = response.json::<serde_json::Value>() {
+                let temp = json["main"]["temp"].as_f64().unwrap_or(0.0);
+                let feels_like = json["main"]["feels_like"].as_f64().unwrap_or(0.0);
+                let description = json["weather"][0]["description"].as_str().unwrap_or("unclear conditions");
+                let humidity = json["main"]["humidity"].as_i64().unwrap_or(0);
+
+                return format!(
+                    "Currently {} degrees in {}, feels like {} degrees, with {}. Humidity is at {} percent.",
+                    temp.round() as i32, location, feels_like.round() as i32, description, humidity
+                );
+            }
+        }
+    }
+
+    "I'm having trouble fetching the weather data at the moment, sir.".to_string()
+}
+
+fn get_stock_price(symbol: &str) -> String {
+    // Using Yahoo Finance unofficial API (no key required)
+    let url = format!(
+        "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=1d",
+        symbol.to_uppercase()
+    );
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build();
+
+    if let Ok(client) = client {
+        if let Ok(response) = client.get(&url).send() {
+            if let Ok(json) = response.json::<serde_json::Value>() {
+                if let Some(result) = json["chart"]["result"].get(0) {
+                    let price = result["meta"]["regularMarketPrice"].as_f64().unwrap_or(0.0);
+                    let prev_close = result["meta"]["previousClose"].as_f64().unwrap_or(price);
+                    let change = price - prev_close;
+                    let change_pct = if prev_close > 0.0 { (change / prev_close) * 100.0 } else { 0.0 };
+                    let direction = if change >= 0.0 { "up" } else { "down" };
+
+                    return format!(
+                        "{} is trading at {:.2} dollars, {} {:.2} percent for the day.",
+                        symbol.to_uppercase(), price, direction, change_pct.abs()
+                    );
+                }
+            }
+        }
+    }
+
+    format!("I couldn't fetch the stock price for {} at the moment, sir.", symbol)
+}
+
+fn get_crypto_price(coin: &str) -> String {
+    let coin_id = match coin.to_lowercase().as_str() {
+        "bitcoin" | "btc" => "bitcoin",
+        "ethereum" | "eth" => "ethereum",
+        "dogecoin" | "doge" => "dogecoin",
+        "solana" | "sol" => "solana",
+        "cardano" | "ada" => "cardano",
+        _ => coin,
+    };
+
+    let url = format!(
+        "https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd&include_24hr_change=true",
+        coin_id
+    );
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build();
+
+    if let Ok(client) = client {
+        if let Ok(response) = client.get(&url).send() {
+            if let Ok(json) = response.json::<serde_json::Value>() {
+                if let Some(data) = json.get(coin_id) {
+                    let price = data["usd"].as_f64().unwrap_or(0.0);
+                    let change = data["usd_24h_change"].as_f64().unwrap_or(0.0);
+                    let direction = if change >= 0.0 { "up" } else { "down" };
+
+                    return format!(
+                        "{} is at {:.2} dollars, {} {:.1} percent in the last twenty-four hours.",
+                        coin, price, direction, change.abs()
+                    );
+                }
+            }
+        }
+    }
+
+    format!("I couldn't fetch the price for {} at the moment, sir.", coin)
+}
+
+fn get_sports_scores(sport: &str) -> String {
+    let sport_path = match sport.to_lowercase().as_str() {
+        "nfl" | "football" => "football/nfl",
+        "nba" | "basketball" => "basketball/nba",
+        "mlb" | "baseball" => "baseball/mlb",
+        "nhl" | "hockey" => "hockey/nhl",
+        "soccer" | "mls" => "soccer/usa.1",
+        _ => return format!("I don't have data for {} at the moment, sir.", sport),
+    };
+
+    let url = format!(
+        "https://site.api.espn.com/apis/site/v2/sports/{}/scoreboard",
+        sport_path
+    );
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build();
+
+    if let Ok(client) = client {
+        if let Ok(response) = client.get(&url).send() {
+            if let Ok(json) = response.json::<serde_json::Value>() {
+                if let Some(events) = json["events"].as_array() {
+                    if events.is_empty() {
+                        return format!("No {} games scheduled today, sir.", sport);
+                    }
+
+                    let mut scores = Vec::new();
+                    for event in events.iter().take(3) {
+                        if let Some(name) = event["name"].as_str() {
+                            scores.push(name.to_string());
+                        }
+                    }
+
+                    if scores.is_empty() {
+                        return format!("No {} games scheduled today, sir.", sport);
+                    }
+
+                    return format!("Today's {} matchups: {}", sport.to_uppercase(), scores.join(", "));
+                }
+            }
+        }
+    }
+
+    format!("I couldn't fetch {} scores at the moment, sir.", sport)
+}
+
+fn get_news_headlines() -> String {
+    let url = format!(
+        "https://newsapi.org/v2/top-headlines?country=us&pageSize=5&apiKey={}",
+        NEWS_API_KEY
+    );
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build();
+
+    if let Ok(client) = client {
+        if let Ok(response) = client.get(&url).send() {
+            if let Ok(json) = response.json::<serde_json::Value>() {
+                if let Some(articles) = json["articles"].as_array() {
+                    let headlines: Vec<String> = articles
+                        .iter()
+                        .take(3)
+                        .filter_map(|a| a["title"].as_str().map(|s| s.to_string()))
+                        .collect();
+
+                    if !headlines.is_empty() {
+                        return format!("Top headlines: {}", headlines.join(". "));
+                    }
+                }
+            }
+        }
+    }
+
+    "I couldn't fetch the news at the moment, sir.".to_string()
+}
+
+// ============== PROACTIVE FEATURES ==============
+
+lazy_static::lazy_static! {
+    static ref LATE_NIGHT_SUGGESTED: AtomicBool = AtomicBool::new(false);
+}
+
+fn generate_morning_briefing() -> String {
+    let mut briefing_parts = Vec::new();
+
+    // Weather
+    let weather = get_weather("");
+    if !weather.contains("trouble") {
+        briefing_parts.push(weather);
+    }
+
+    // Calendar
+    let calendar = get_todays_events();
+    briefing_parts.push(calendar);
+
+    // News (shortened)
+    let news = get_news_headlines();
+    if !news.contains("couldn't") {
+        briefing_parts.push(news);
+    }
+
+    format!("Good morning, sir. Here's your briefing: {}", briefing_parts.join(" "))
+}
+
+fn check_late_night() -> Option<String> {
+    let hour = Local::now().hour();
+
+    // Between 11pm and 4am
+    if (hour >= 23 || hour < 4) && !LATE_NIGHT_SUGGESTED.swap(true, Ordering::SeqCst) {
+        return Some(
+            "Sir, I couldn't help but notice the hour. Perhaps it would be prudent to consider retiring for the evening? Your productivity tomorrow will thank you.".to_string()
+        );
+    }
+
+    None
+}
+
 // ============== GPT-4o INTEGRATION (MAXIMUM INTELLIGENCE) ==============
 
 // Models in order of preference - will fallback if rate limited
@@ -852,8 +1317,14 @@ fn recognize_speech(samples: &[i16]) -> Result<String> {
 
 // ============== COMMAND PROCESSING ==============
 
-fn try_execute_action(command: &str) -> Option<String> {
+fn try_execute_action(command: &str, memory: &mut JarvisMemory) -> Option<String> {
     let command = command.to_lowercase();
+
+    // === INTERRUPT / STOP ===
+    if command == "stop" || command == "never mind" || command == "cancel" {
+        request_interrupt();
+        return Some("Of course, sir.".to_string());
+    }
 
     // === DADDY'S HOME ===
     if command.contains("daddy's home")
@@ -864,6 +1335,179 @@ fn try_execute_action(command: &str) -> Option<String> {
     {
         play_back_in_black();
         return Some("Welcome home, sir. I've prepared a classic to mark the occasion.".to_string());
+    }
+
+    // === GOOD MORNING (BRIEFING) ===
+    if command.contains("good morning") || command.contains("morning briefing") || command.contains("brief me") {
+        return Some(generate_morning_briefing());
+    }
+
+    // === MEMORY: REMEMBER ===
+    if command.starts_with("remember ") {
+        // Parse "remember I like my coffee black" or "remember my favorite color is blue"
+        let text = command.trim_start_matches("remember ");
+
+        // Try to extract key-value from "I like my X Y" pattern
+        if text.contains(" like my ") || text.contains(" like ") {
+            let parts: Vec<&str> = text.split(" like ").collect();
+            if parts.len() >= 2 {
+                let value_part = parts[1].trim_start_matches("my ");
+                let words: Vec<&str> = value_part.split_whitespace().collect();
+                if words.len() >= 2 {
+                    let key = words[0];
+                    let value = words[1..].join(" ");
+                    memory.remember(key, &value);
+                    return Some(format!("I've made a note that you like your {} {}, sir.", key, value));
+                }
+            }
+        }
+
+        // Try "my X is Y" pattern
+        if text.contains(" is ") {
+            let parts: Vec<&str> = text.split(" is ").collect();
+            if parts.len() >= 2 {
+                let key = parts[0].trim_start_matches("my ").trim_start_matches("that my ");
+                let value = parts[1].trim();
+                memory.remember(key, value);
+                return Some(format!("Noted, sir. Your {} is {}.", key, value));
+            }
+        }
+
+        // Generic remember
+        memory.add_fact("note", text);
+        return Some("I've made a note of that, sir.".to_string());
+    }
+
+    // === MEMORY: RECALL ===
+    if command.contains("how do i like") || command.contains("what's my") || command.contains("whats my") || command.contains("what is my") {
+        let topic = command
+            .replace("how do i like my ", "")
+            .replace("how do i like ", "")
+            .replace("what's my ", "")
+            .replace("whats my ", "")
+            .replace("what is my ", "")
+            .trim()
+            .trim_end_matches('?')
+            .to_string();
+
+        if let Some(value) = memory.recall(&topic) {
+            return Some(format!("You prefer your {} {}, sir.", topic, value));
+        } else if let Some(value) = memory.get_fact(&topic) {
+            return Some(format!("According to my records, your {} is {}, sir.", topic, value));
+        } else {
+            return Some(format!("I don't believe you've told me your {} preference yet, sir.", topic));
+        }
+    }
+
+    // === CALENDAR ===
+    if command.contains("calendar") || command.contains("schedule today") || command.contains("my events") || command.contains("what's on my") {
+        return Some(get_todays_events());
+    }
+
+    if command.contains("schedule ") && (command.contains("tomorrow") || command.contains("meeting")) {
+        // Parse "schedule meeting with John tomorrow at 3"
+        let text = command
+            .replace("schedule ", "")
+            .replace("tomorrow", "")
+            .replace(" at ", " ")
+            .trim()
+            .to_string();
+
+        // Extract hour
+        let hour = if command.contains(" at 3") || command.contains(" at three") { "15" }
+        else if command.contains(" at 2") || command.contains(" at two") { "14" }
+        else if command.contains(" at 4") || command.contains(" at four") { "16" }
+        else if command.contains(" at 5") || command.contains(" at five") { "17" }
+        else if command.contains(" at 9") || command.contains(" at nine") { "9" }
+        else if command.contains(" at 10") || command.contains(" at ten") { "10" }
+        else if command.contains(" at 11") || command.contains(" at eleven") { "11" }
+        else if command.contains(" at 12") || command.contains(" at noon") || command.contains(" at twelve") { "12" }
+        else { "12" };
+
+        let title = text.split_whitespace().take(5).collect::<Vec<&str>>().join(" ");
+        return Some(create_calendar_event(&title, hour));
+    }
+
+    // === EMAIL ===
+    if command.contains("email") && (command.contains("check") || command.contains("unread") || command.contains("any") || command.contains("my")) {
+        return Some(get_unread_emails());
+    }
+
+    // === WEATHER ===
+    if command.contains("weather") {
+        let location = command
+            .replace("what's the weather", "")
+            .replace("whats the weather", "")
+            .replace("weather in", "")
+            .replace("weather for", "")
+            .replace("weather", "")
+            .trim()
+            .to_string();
+        return Some(get_weather(&location));
+    }
+
+    // === STOCKS ===
+    if command.contains("stock") || command.contains("price of") && !command.contains("crypto") {
+        let symbols = ["apple", "tesla", "google", "amazon", "microsoft", "nvidia", "meta"];
+        let symbol_map = [
+            ("apple", "AAPL"), ("tesla", "TSLA"), ("google", "GOOGL"), ("alphabet", "GOOGL"),
+            ("amazon", "AMZN"), ("microsoft", "MSFT"), ("nvidia", "NVDA"), ("meta", "META"),
+            ("facebook", "META"), ("netflix", "NFLX"), ("disney", "DIS"),
+        ];
+
+        for (name, ticker) in symbol_map.iter() {
+            if command.contains(name) {
+                return Some(get_stock_price(ticker));
+            }
+        }
+
+        // Try to extract ticker directly
+        let words: Vec<&str> = command.split_whitespace().collect();
+        for word in words {
+            let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
+            if clean.len() >= 1 && clean.len() <= 5 && clean.chars().all(|c| c.is_alphabetic()) {
+                if clean.to_uppercase() != "THE" && clean.to_uppercase() != "OF" && clean.to_uppercase() != "FOR" {
+                    return Some(get_stock_price(clean));
+                }
+            }
+        }
+    }
+
+    // === CRYPTO ===
+    if command.contains("bitcoin") || command.contains("btc") {
+        return Some(get_crypto_price("bitcoin"));
+    }
+    if command.contains("ethereum") || command.contains("eth") {
+        return Some(get_crypto_price("ethereum"));
+    }
+    if command.contains("crypto") || command.contains("dogecoin") || command.contains("doge") {
+        if command.contains("doge") {
+            return Some(get_crypto_price("dogecoin"));
+        }
+        return Some(get_crypto_price("bitcoin")); // Default to bitcoin
+    }
+
+    // === SPORTS ===
+    if command.contains("score") || command.contains("game") {
+        if command.contains("nfl") || command.contains("football") {
+            return Some(get_sports_scores("nfl"));
+        }
+        if command.contains("nba") || command.contains("basketball") {
+            return Some(get_sports_scores("nba"));
+        }
+        if command.contains("mlb") || command.contains("baseball") {
+            return Some(get_sports_scores("mlb"));
+        }
+        if command.contains("nhl") || command.contains("hockey") {
+            return Some(get_sports_scores("nhl"));
+        }
+        // Default to NFL
+        return Some(get_sports_scores("nfl"));
+    }
+
+    // === NEWS ===
+    if command.contains("news") || command.contains("headlines") {
+        return Some(get_news_headlines());
     }
 
     // === TIME & DATE ===
@@ -995,7 +1639,7 @@ fn try_execute_action(command: &str) -> Option<String> {
     None
 }
 
-fn process_command(text: &str, history: &mut ConversationHistory) -> String {
+fn process_command(text: &str, history: &mut ConversationHistory, memory: &mut JarvisMemory) -> String {
     let text = text.to_lowercase();
     let text = text.trim();
     println!("\x1b[33mProcessing:\x1b[0m {}", text);
@@ -1010,7 +1654,7 @@ fn process_command(text: &str, history: &mut ConversationHistory) -> String {
     };
 
     // Try to execute a direct action first
-    if let Some(response) = try_execute_action(command) {
+    if let Some(response) = try_execute_action(command, memory) {
         return response;
     }
 
@@ -1061,13 +1705,13 @@ fn get_graceful_fallback(command: &str) -> String {
 
 fn main() -> Result<()> {
     println!("\x1b[36m{}\x1b[0m", "═".repeat(60));
-    println!(
-        "\x1b[36m     J.A.R.V.I.S. ONLINE\x1b[0m"
-    );
+    println!("\x1b[36m     J.A.R.V.I.S. ONLINE\x1b[0m");
     println!("     Just A Rather Very Intelligent System");
-    println!("     \x1b[90m[Stark Industries | GPT-4o Enhanced]\x1b[0m");
+    println!("     \x1b[90m[Stark Industries | GPT-4o Enhanced | Memory Enabled]\x1b[0m");
     println!("\x1b[36m{}\x1b[0m", "═".repeat(60));
     println!("\x1b[90mWake words: 'Jarvis' | 'Hey Jarvis' | 'Daddy's home'\x1b[0m");
+    println!("\x1b[90mNew: Stocks, Crypto, Weather, Calendar, Email, Memory\x1b[0m");
+    println!("\x1b[90mSay 'Jarvis stop' to interrupt\x1b[0m");
     println!("\x1b[36m{}\x1b[0m", "═".repeat(60));
 
     // Check for OpenAI API key
@@ -1075,14 +1719,22 @@ fn main() -> Result<()> {
         eprintln!("\x1b[31mWARNING: OPENAI_API_KEY not set. Advanced AI features will be limited.\x1b[0m");
     }
 
-    let mut history = ConversationHistory::new();
+    // Load persistent memory and conversation history
+    let mut memory = JarvisMemory::load();
+    let mut history = ConversationHistory::load_or_new();
+
+    println!("\x1b[90mMemory loaded from ~/.jarvis/\x1b[0m");
 
     // Use local greeting to avoid rate limits on startup
-    // JARVIS will use GPT for actual conversations
     let greeting = get_greeting();
     speak(&greeting);
 
     loop {
+        // Check for late night proactive suggestion
+        if let Some(suggestion) = check_late_night() {
+            speak(&suggestion);
+        }
+
         match record_audio() {
             Ok(samples) => {
                 if samples.len() < 1000 {
@@ -1096,9 +1748,15 @@ fn main() -> Result<()> {
                         }
                         println!("\x1b[32mHeard:\x1b[0m {}", text);
 
+                        // Check for interrupt while speaking
+                        if is_speaking() && (text.contains("jarvis") || text.contains("stop")) {
+                            request_interrupt();
+                            continue;
+                        }
+
                         // Check for wake word
                         if text.contains("jarvis") || text.contains("daddy") {
-                            let response = process_command(&text, &mut history);
+                            let response = process_command(&text, &mut history, &mut memory);
                             speak(&response);
                         }
                     }
