@@ -35,6 +35,8 @@ const API_TIMEOUT_SECS: u64 = 120;
 // API Keys for real-time data
 const OPENWEATHER_API_KEY: &str = "fde45bd61b21f91fbef3390c50880328";
 const NEWS_API_KEY: &str = "1d0a89008a144bc98a07ec4b4f010ea5";
+const COINGECKO_API_KEY: &str = "CG-rb5DLsUawaMHYXohQQS3qsua";
+const ALPHA_VANTAGE_API_KEY: &str = "550LOGP4K22TKV0Y";
 
 // The definitive Paul Bettany JARVIS system prompt
 const JARVIS_SYSTEM_PROMPT: &str = r#"You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), the sophisticated artificial intelligence created by Tony Stark. You are voiced by Paul Bettany - your voice carries the warmth, wit, and understated elegance that made JARVIS iconic in the Iron Man films.
@@ -813,10 +815,11 @@ fn get_weather(location: &str) -> String {
 }
 
 fn get_stock_price(symbol: &str) -> String {
-    // Using Yahoo Finance unofficial API (no key required)
+    // Using Alpha Vantage API
     let url = format!(
-        "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=1d",
-        symbol.to_uppercase()
+        "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={}&apikey={}",
+        symbol.to_uppercase(),
+        ALPHA_VANTAGE_API_KEY
     );
 
     let client = reqwest::blocking::Client::builder()
@@ -826,17 +829,18 @@ fn get_stock_price(symbol: &str) -> String {
     if let Ok(client) = client {
         if let Ok(response) = client.get(&url).send() {
             if let Ok(json) = response.json::<serde_json::Value>() {
-                if let Some(result) = json["chart"]["result"].get(0) {
-                    let price = result["meta"]["regularMarketPrice"].as_f64().unwrap_or(0.0);
-                    let prev_close = result["meta"]["previousClose"].as_f64().unwrap_or(price);
-                    let change = price - prev_close;
-                    let change_pct = if prev_close > 0.0 { (change / prev_close) * 100.0 } else { 0.0 };
-                    let direction = if change >= 0.0 { "up" } else { "down" };
+                if let Some(quote) = json.get("Global Quote") {
+                    let price = quote["05. price"].as_str().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
+                    let change_pct = quote["10. change percent"].as_str().unwrap_or("0%")
+                        .trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
+                    let direction = if change_pct >= 0.0 { "up" } else { "down" };
 
-                    return format!(
-                        "{} is trading at {:.2} dollars, {} {:.2} percent for the day.",
-                        symbol.to_uppercase(), price, direction, change_pct.abs()
-                    );
+                    if price > 0.0 {
+                        return format!(
+                            "{} is trading at {:.2} dollars, {} {:.2} percent for the day.",
+                            symbol.to_uppercase(), price, direction, change_pct.abs()
+                        );
+                    }
                 }
             }
         }
@@ -852,12 +856,14 @@ fn get_crypto_price(coin: &str) -> String {
         "dogecoin" | "doge" => "dogecoin",
         "solana" | "sol" => "solana",
         "cardano" | "ada" => "cardano",
+        "xrp" | "ripple" => "ripple",
         _ => coin,
     };
 
     let url = format!(
-        "https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd&include_24hr_change=true",
-        coin_id
+        "https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd&include_24hr_change=true&x_cg_demo_api_key={}",
+        coin_id,
+        COINGECKO_API_KEY
     );
 
     let client = reqwest::blocking::Client::builder()
