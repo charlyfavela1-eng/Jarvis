@@ -7,13 +7,13 @@ from functools import partial
 
 from colorama import Fore
 
-from packages.memory.memory import Memory
-from PluginManager import PluginManager
-from utilities import schedule
-from utilities.animations import SpinnerThread
-from utilities.GeneralUtilities import get_parent_directory
-from utilities.notification import notify
-from utilities.voice import create_voice
+from .packages.memory.memory import Memory
+from .PluginManager import PluginManager
+from .utilities import schedule
+from .utilities.animations import SpinnerThread
+from .utilities.GeneralUtilities import get_parent_directory
+from .utilities.notification import notify
+from .utilities.voice import create_voice
 
 
 class JarvisAPI(object):

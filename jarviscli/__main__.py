@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import Jarvis
+from jarviscli import Jarvis
 import colorama
 import sys
 from jarviscli.plugins.message import send_join_message
