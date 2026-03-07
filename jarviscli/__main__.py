@@ -1,8 +1,16 @@
 # -*- coding: utf-8 -*-
-import Jarvis
-import colorama
+import os
 import sys
-from jarviscli.plugins.message import send_join_message
+
+import colorama
+
+
+PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+if PACKAGE_DIR not in sys.path:
+    sys.path.insert(0, PACKAGE_DIR)
+
+import Jarvis
+from plugins.message import send_join_message
 
 
 def check_python_version():
