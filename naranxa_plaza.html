@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Naranxa Plaza Puerta del Sur | Nogales, Sonora</title>
+  <style>
+    :root {
+      --orange: #e8610a;
+      --orange-light: #f58220;
+      --dark: #1a1a2e;
+      --dark2: #16213e;
+      --white: #ffffff;
+      --gray: #f4f4f4;
+      --text: #333;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(26, 26, 46, 0.92);
+      backdrop-filter: blur(10px);
+      transition: background 0.3s;
+    }
+    .nav-logo {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--orange-light);
+      letter-spacing: 1px;
+    }
+    .nav-logo span { color: var(--white); }
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a {
+      color: #ccc;
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--orange-light); }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      background: linear-gradient(135deg, var(--dark) 0%, var(--dark2) 50%, #0f3460 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(232,97,10,0.15) 0%, transparent 70%);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      animation: pulse 4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+      50%       { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+    }
+    .hero-badge {
+      display: inline-block;
+      background: var(--orange);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      padding: 0.4rem 1.2rem;
+      border-radius: 50px;
+      margin-bottom: 1.5rem;
+      animation: fadeDown 0.8s ease;
+    }
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 5rem);
+      font-weight: 900;
+      color: var(--white);
+      line-height: 1.1;
+      margin-bottom: 0.5rem;
+      animation: fadeDown 1s ease 0.1s both;
+    }
+    .hero h1 span { color: var(--orange-light); }
+    .hero-sub {
+      font-size: clamp(1rem, 2vw, 1.3rem);
+      color: #aab;
+      margin-bottom: 2.5rem;
+      animation: fadeDown 1s ease 0.2s both;
+    }
+    .hero-ctas {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      animation: fadeDown 1s ease 0.3s both;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--orange), var(--orange-light));
+      color: #fff;
+      padding: 0.9rem 2.2rem;
+      border-radius: 50px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 1rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 20px rgba(232,97,10,0.4);
+    }
+    .btn-primary:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 30px rgba(232,97,10,0.6);
+    }
+    .btn-outline {
+      border: 2px solid rgba(255,255,255,0.3);
+      color: #fff;
+      padding: 0.9rem 2.2rem;
+      border-radius: 50px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+    .btn-outline:hover {
+      border-color: var(--orange-light);
+      color: var(--orange-light);
+      transform: translateY(-3px);
+    }
+    .hero-stats {
+      display: flex;
+      gap: 3rem;
+      margin-top: 4rem;
+      animation: fadeUp 1s ease 0.5s both;
+    }
+    .stat { text-align: center; }
+    .stat-num {
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--orange-light);
+    }
+    .stat-label { font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── SECTION BASE ── */
+    section { padding: 5rem 2rem; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .section-title {
+      text-align: center;
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+    }
+    .section-title span { color: var(--orange); }
+    .section-sub {
+      text-align: center;
+      color: #777;
+      margin-bottom: 3rem;
+      font-size: 1rem;
+    }
+    .divider {
+      width: 60px; height: 4px;
+      background: linear-gradient(90deg, var(--orange), var(--orange-light));
+      border-radius: 2px;
+      margin: 0.8rem auto 1.5rem;
+    }
+
+    /* ── LOCALES ── */
+    #locales { background: var(--gray); }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1.5rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 2rem 1.5rem;
+      text-align: center;
+      box-shadow: 0 2px 15px rgba(0,0,0,0.07);
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+    .card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 8px 30px rgba(232,97,10,0.15);
+    }
+    .card-icon {
+      font-size: 2.8rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+    .card h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      color: var(--dark);
+    }
+    .card p { font-size: 0.88rem; color: #777; line-height: 1.5; }
+
+    /* ── SOBRE NOSOTROS ── */
+    #sobre { background: #fff; }
+    .sobre-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+    .sobre-text h2 {
+      font-size: clamp(1.6rem, 3vw, 2.4rem);
+      font-weight: 800;
+      margin-bottom: 1rem;
+    }
+    .sobre-text h2 span { color: var(--orange); }
+    .sobre-text p {
+      color: #555;
+      line-height: 1.8;
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+    .sobre-img {
+      border-radius: 20px;
+      overflow: hidden;
+      background: linear-gradient(135deg, var(--orange) 0%, var(--orange-light) 100%);
+      aspect-ratio: 4/3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 5rem;
+      box-shadow: 0 10px 40px rgba(232,97,10,0.3);
+      gap: 1rem;
+    }
+    .sobre-img p {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    /* ── HORARIOS ── */
+    #horarios { background: var(--dark); }
+    #horarios .section-title { color: #fff; }
+    #horarios .section-sub { color: #aaa; }
+    .horarios-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .horario-card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      padding: 1.5rem;
+      text-align: center;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .horario-card:hover {
+      background: rgba(232,97,10,0.15);
+      border-color: var(--orange);
+    }
+    .horario-card .dia {
+      color: var(--orange-light);
+      font-weight: 700;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 0.4rem;
+    }
+    .horario-card .hora {
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    /* ── MAPA ── */
+    #mapa { background: var(--gray); }
+    .mapa-wrapper {
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    }
+    .mapa-wrapper iframe {
+      width: 100%;
+      height: 460px;
+      border: none;
+      display: block;
+    }
+    .mapa-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    .mapa-info-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 1.4rem 1.6rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    .mapa-info-card .icon {
+      font-size: 1.8rem;
+      flex-shrink: 0;
+    }
+    .mapa-info-card strong {
+      display: block;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--orange);
+      margin-bottom: 0.25rem;
+    }
+    .mapa-info-card span { font-size: 0.95rem; color: #444; }
+
+    /* ── CONTACTO ── */
+    #contacto { background: #fff; }
+    .contacto-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: start;
+    }
+    .contacto-info h3 {
+      font-size: 1.4rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+      color: var(--dark);
+    }
+    .contacto-item {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+      color: #555;
+    }
+    .contacto-item .ci { font-size: 1.3rem; }
+    .form-group { margin-bottom: 1.2rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 0.4rem;
+    }
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      transition: border-color 0.2s;
+      outline: none;
+      color: var(--text);
+    }
+    .form-group input:focus,
+    .form-group textarea:focus { border-color: var(--orange); }
+    .form-group textarea { resize: vertical; min-height: 120px; }
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, var(--orange), var(--orange-light));
+      color: #fff;
+      border: none;
+      padding: 1rem;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 15px rgba(232,97,10,0.3);
+    }
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(232,97,10,0.5);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--dark);
+      color: #aaa;
+      text-align: center;
+      padding: 2.5rem 2rem;
+    }
+    footer .footer-logo {
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: var(--orange-light);
+      margin-bottom: 0.5rem;
+    }
+    footer .footer-logo span { color: #fff; }
+    footer p { font-size: 0.85rem; }
+    footer a { color: var(--orange-light); text-decoration: none; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .sobre-grid, .contacto-grid { grid-template-columns: 1fr; gap: 2rem; }
+      .hero-stats { gap: 2rem; }
+    }
+    @media (max-width: 480px) {
+      .hero-stats { flex-wrap: wrap; gap: 1.5rem; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">Naranxa<span> Plaza</span></div>
+    <ul class="nav-links">
+      <li><a href="#locales">Locales</a></li>
+      <li><a href="#sobre">Nosotros</a></li>
+      <li><a href="#horarios">Horarios</a></li>
+      <li><a href="#mapa">Ubicación</a></li>
+      <li><a href="#contacto">Contacto</a></li>
+    </ul>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero" id="inicio">
+    <div class="hero-badge">Nogales, Sonora &bull; Puerta del Sur</div>
+    <h1>Naranxa<br/><span>Plaza</span></h1>
+    <p class="hero-sub">Tu destino de compras, gastronomía y entretenimiento<br/>en el corazón de Nogales.</p>
+    <div class="hero-ctas">
+      <a href="#locales" class="btn-primary">Ver Locales</a>
+      <a href="#mapa" class="btn-outline">Cómo Llegar</a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-num">20+</div>
+        <div class="stat-label">Locales</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">7</div>
+        <div class="stat-label">Días Abiertos</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">1</div>
+        <div class="stat-label">Destino</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOCALES -->
+  <section id="locales">
+    <div class="container">
+      <p class="section-title">Nuestros <span>Locales</span></p>
+      <div class="divider"></div>
+      <p class="section-sub">Encuentra todo lo que necesitas en un solo lugar</p>
+      <div class="cards-grid">
+        <div class="card">
+          <span class="card-icon">🍽️</span>
+          <h3>Restaurantes</h3>
+          <p>Cocina local e internacional con los mejores sabores de Nogales.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">☕</span>
+          <h3>Cafeterías</h3>
+          <p>Café de especialidad y repostería artesanal para tu descanso.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">🛍️</span>
+          <h3>Boutiques</h3>
+          <p>Moda, accesorios y ropa para toda la familia.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">💅</span>
+          <h3>Belleza y Spa</h3>
+          <p>Salones de belleza y centros de bienestar para relajarte.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">📱</span>
+          <h3>Tecnología</h3>
+          <p>Tiendas de electrónica, celulares y accesorios digitales.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">🏋️</span>
+          <h3>Servicios</h3>
+          <p>Bancos, farmacias, gimnasio y más servicios esenciales.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SOBRE NOSOTROS -->
+  <section id="sobre">
+    <div class="container">
+      <div class="sobre-grid">
+        <div class="sobre-text">
+          <h2>El corazón de <span>Nogales</span></h2>
+          <div class="divider" style="margin:0 0 1.5rem;"></div>
+          <p>
+            Naranxa Plaza Puerta del Sur es el centro comercial de referencia en Nogales,
+            Sonora. Un espacio moderno pensado para que toda la familia disfrute de una
+            experiencia única de compras, gastronomía y entretenimiento.
+          </p>
+          <p>
+            Ubicados estratégicamente en la zona sur de la ciudad, contamos con amplio
+            estacionamiento, accesibilidad total y una variedad de locales que cubren
+            todas tus necesidades en una sola visita.
+          </p>
+          <a href="#contacto" class="btn-primary" style="display:inline-block;margin-top:1.5rem;">Contáctanos</a>
+        </div>
+        <div class="sobre-img">
+          🏬
+          <p>Puerta del Sur</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HORARIOS -->
+  <section id="horarios">
+    <div class="container">
+      <p class="section-title">Horarios de <span>Atención</span></p>
+      <div class="divider"></div>
+      <p class="section-sub">Estamos abiertos toda la semana para servirte</p>
+      <div class="horarios-grid">
+        <div class="horario-card">
+          <div class="dia">Lunes</div>
+          <div class="hora">10:00 – 21:00</div>
+        </div>
+        <div class="horario-card">
+          <div class="dia">Martes</div>
+          <div class="hora">10:00 – 21:00</div>
+        </div>
+        <div class="horario-card">
+          <div class="dia">Miércoles</div>
+          <div class="hora">10:00 – 21:00</div>
+        </div>
+        <div class="horario-card">
+          <div class="dia">Jueves</div>
+          <div class="hora">10:00 – 21:00</div>
+        </div>
+        <div class="horario-card">
+          <div class="dia">Viernes</div>
+          <div class="hora">10:00 – 22:00</div>
+        </div>
+        <div class="horario-card">
+          <div class="dia">Sábado</div>
+          <div class="hora">10:00 – 22:00</div>
+        </div>
+        <div class="horario-card">
+          <div class="dia">Domingo</div>
+          <div class="hora">11:00 – 20:00</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAPA -->
+  <section id="mapa">
+    <div class="container">
+      <p class="section-title">Nuestra <span>Ubicación</span></p>
+      <div class="divider"></div>
+      <p class="section-sub">Fácil acceso desde toda la ciudad</p>
+      <div class="mapa-wrapper">
+        <iframe
+          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3398.4!2d-110.9571619!3d31.256689!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x86d1530c70a54301%3A0xe73f1cb036191ce9!2sNaranxa%20Plaza%20Puerta%20del%20Sur!5e0!3m2!1ses!2smx!4v1"
+          allowfullscreen=""
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          title="Ubicación Naranxa Plaza Puerta del Sur">
+        </iframe>
+      </div>
+      <div class="mapa-info">
+        <div class="mapa-info-card">
+          <span class="icon">📍</span>
+          <div>
+            <strong>Dirección</strong>
+            <span>Zona Sur, Nogales, Sonora, México</span>
+          </div>
+        </div>
+        <div class="mapa-info-card">
+          <span class="icon">🅿️</span>
+          <div>
+            <strong>Estacionamiento</strong>
+            <span>Amplio estacionamiento gratuito</span>
+          </div>
+        </div>
+        <div class="mapa-info-card">
+          <span class="icon">🚌</span>
+          <div>
+            <strong>Transporte</strong>
+            <span>Acceso en transporte público y rutas locales</span>
+          </div>
+        </div>
+        <div class="mapa-info-card">
+          <span class="icon">♿</span>
+          <div>
+            <strong>Accesibilidad</strong>
+            <span>Instalaciones 100% accesibles</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACTO -->
+  <section id="contacto">
+    <div class="container">
+      <p class="section-title">Ponte en <span>Contacto</span></p>
+      <div class="divider"></div>
+      <p class="section-sub">Estamos aquí para ayudarte</p>
+      <div class="contacto-grid">
+        <div class="contacto-info">
+          <h3>Información de Contacto</h3>
+          <div class="contacto-item">
+            <span class="ci">📍</span>
+            <span>Zona Sur, Nogales, Sonora, México</span>
+          </div>
+          <div class="contacto-item">
+            <span class="ci">📞</span>
+            <span>+52 (631) 000-0000</span>
+          </div>
+          <div class="contacto-item">
+            <span class="ci">✉️</span>
+            <span>info@naranxaplaza.com</span>
+          </div>
+          <div class="contacto-item">
+            <span class="ci">🕙</span>
+            <span>Lun–Vie 10:00–21:00 | Sáb 10:00–22:00 | Dom 11:00–20:00</span>
+          </div>
+          <div style="margin-top:1.5rem;display:flex;gap:1rem;">
+            <a href="#" style="font-size:1.8rem;text-decoration:none;">📘</a>
+            <a href="#" style="font-size:1.8rem;text-decoration:none;">📸</a>
+            <a href="#" style="font-size:1.8rem;text-decoration:none;">🐦</a>
+          </div>
+        </div>
+        <form onsubmit="handleSubmit(event)">
+          <div class="form-group">
+            <label for="nombre">Nombre</label>
+            <input type="text" id="nombre" placeholder="Tu nombre completo" required />
+          </div>
+          <div class="form-group">
+            <label for="email">Correo Electrónico</label>
+            <input type="email" id="email" placeholder="tu@correo.com" required />
+          </div>
+          <div class="form-group">
+            <label for="mensaje">Mensaje</label>
+            <textarea id="mensaje" placeholder="¿En qué podemos ayudarte?" required></textarea>
+          </div>
+          <button type="submit" class="btn-submit">Enviar Mensaje ✉️</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">Naranxa<span> Plaza</span></div>
+    <p>Puerta del Sur &bull; Nogales, Sonora, México</p>
+    <p style="margin-top:0.5rem;font-size:0.8rem;">
+      &copy; 2026 Naranxa Plaza. Todos los derechos reservados.
+    </p>
+  </footer>
+
+  <script>
+    function handleSubmit(e) {
+      e.preventDefault();
+      const btn = e.target.querySelector('.btn-submit');
+      btn.textContent = '¡Mensaje enviado! ✅';
+      btn.style.background = 'linear-gradient(135deg,#2ecc71,#27ae60)';
+      setTimeout(() => {
+        btn.textContent = 'Enviar Mensaje ✉️';
+        btn.style.background = '';
+        e.target.reset();
+      }, 3000);
+    }
+
+    // Fade-in on scroll
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.card, .horario-card, .mapa-info-card, .sobre-grid').forEach(el => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(30px)';
+      el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+      observer.observe(el);
+    });
+  </script>
+</body>
+</html>
