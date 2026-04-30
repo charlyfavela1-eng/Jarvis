@@ -1,3 +1,4 @@
+anthropic
 archey4==4.6.0.post1; sys_platform != 'darwin'
 beautifulsoup4
 climage
