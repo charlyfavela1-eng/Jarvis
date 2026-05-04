@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snitch Voladora — Mecanismo Real</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold:   #FFD700;
+      --gold2:  #FFA500;
+      --gold3:  #B8860B;
+      --bg:     #0a0a0f;
+      --panel:  #12121a;
+      --border: #2a2a3a;
+      --text:   #e8e8f0;
+      --dim:    #6060808;
+      --red:    #ff4444;
+      --green:  #44ff88;
+      --cyan:   #44ddff;
+      --r: 1rem;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      grid-template-columns: 1fr 320px;
+      grid-template-areas:
+        "header  header"
+        "canvas  sidebar"
+        "footer  footer";
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    header {
+      grid-area: header;
+      background: linear-gradient(90deg, #1a1400 0%, #0a0a0f 40%, #1a1400 100%);
+      border-bottom: 1px solid var(--gold3);
+      padding: .6rem 1.4rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header .snitch-icon {
+      width: 32px; height: 32px;
+      background: radial-gradient(circle at 35% 35%, #fff8a0, var(--gold), var(--gold3));
+      border-radius: 50%;
+      box-shadow: 0 0 14px 4px #ffd70088;
+      flex-shrink: 0;
+      position: relative;
+    }
+    header .snitch-icon::before,
+    header .snitch-icon::after {
+      content: '';
+      position: absolute;
+      top: 8px;
+      width: 24px; height: 10px;
+      background: rgba(255,215,0,.35);
+      border-radius: 50%;
+      border: 1px solid rgba(255,215,0,.6);
+    }
+    header .snitch-icon::before { right: 28px; transform: rotate(-20deg); }
+    header .snitch-icon::after  { left:  28px; transform: rotate( 20deg); }
+
+    header h1 { font-size: 1.15rem; font-weight: 700; color: var(--gold); letter-spacing: .04em; }
+    header h1 span { color: var(--text); font-weight: 400; font-size: .85rem; margin-left: .5rem; }
+
+    .badge {
+      margin-left: auto;
+      background: #1a1400;
+      border: 1px solid var(--gold3);
+      color: var(--gold);
+      font-size: .72rem;
+      padding: .15rem .55rem;
+      border-radius: 99px;
+      letter-spacing: .06em;
+    }
+
+    /* ── Canvas area ──────────────────────────────────────────── */
+    .canvas-wrap {
+      grid-area: canvas;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 50% 50%, #0d0d20 0%, #050508 100%);
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .overlay-msg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .4s;
+    }
+    .overlay-msg.show { opacity: 1; pointer-events: auto; }
+    .overlay-msg .big {
+      font-size: 2.8rem;
+      font-weight: 900;
+      color: var(--gold);
+      text-shadow: 0 0 40px var(--gold), 0 0 80px var(--gold2);
+      animation: pulse 1s ease-in-out infinite;
+    }
+    .overlay-msg .sub {
+      margin-top: .5rem;
+      color: var(--text);
+      font-size: 1rem;
+    }
+    @keyframes pulse {
+      0%,100% { transform: scale(1); }
+      50%      { transform: scale(1.05); }
+    }
+
+    /* ── Controls hint ────────────────────────────────────────── */
+    .controls-hint {
+      position: absolute;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: .5rem;
+      align-items: center;
+      pointer-events: none;
+    }
+    .key {
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 5px;
+      padding: .15rem .45rem;
+      font-size: .72rem;
+      font-family: monospace;
+      color: #ccc;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────────────── */
+    .sidebar {
+      grid-area: sidebar;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .sidebar section {
+      border-bottom: 1px solid var(--border);
+      padding: .9rem 1rem;
+    }
+    .sidebar section:last-child { border-bottom: none; }
+
+    .section-title {
+      font-size: .65rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--gold3);
+      margin-bottom: .65rem;
+    }
+
+    /* Telemetry rows */
+    .telem-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .35rem .5rem;
+    }
+    .telem-item label {
+      display: block;
+      font-size: .68rem;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
+    .telem-item .val {
+      font-size: .9rem;
+      font-family: 'Courier New', monospace;
+      font-weight: 700;
+    }
+    .val.gold  { color: var(--gold); }
+    .val.green { color: var(--green); }
+    .val.red   { color: var(--red); }
+    .val.cyan  { color: var(--cyan); }
+    .val.white { color: #fff; }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .8rem;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      flex-shrink: 0;
+    }
+    .dot.evading { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+    /* Force bars */
+    .force-row {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      margin-bottom: .3rem;
+      font-size: .75rem;
+    }
+    .force-label { width: 70px; color: #888; flex-shrink: 0; }
+    .force-bar-bg {
+      flex: 1;
+      height: 5px;
+      background: #1e1e2e;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .force-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width .12s ease;
+    }
+    .force-val { width: 38px; text-align: right; font-family: monospace; font-size: .72rem; color: #888; }
+
+    /* Controls */
+    .btn-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .35rem;
+      margin-bottom: .5rem;
+    }
+    .btn-grid .gap { visibility: hidden; }
+    button.ctrl {
+      background: #1a1a28;
+      border: 1px solid #2a2a40;
+      color: var(--text);
+      padding: .45rem;
+      border-radius: 6px;
+      font-size: .8rem;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, transform .1s;
+      user-select: none;
+    }
+    button.ctrl:hover  { background: #252535; border-color: var(--gold3); }
+    button.ctrl:active { transform: scale(.94); }
+    button.ctrl.active { background: #2a2000; border-color: var(--gold); color: var(--gold); }
+
+    .btn-row {
+      display: flex;
+      gap: .35rem;
+      margin-top: .35rem;
+    }
+    button.primary {
+      flex: 1;
+      background: linear-gradient(135deg, #2a1800, #1a1000);
+      border: 1px solid var(--gold3);
+      color: var(--gold);
+      padding: .5rem;
+      border-radius: 6px;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    button.primary:hover {
+      background: linear-gradient(135deg, #3a2000, #2a1800);
+      border-color: var(--gold);
+      box-shadow: 0 0 12px #ffd70040;
+    }
+    button.danger {
+      background: linear-gradient(135deg, #2a0000, #1a0000);
+      border: 1px solid #660000;
+      color: #ff6666;
+    }
+    button.danger:hover { border-color: var(--red); box-shadow: 0 0 12px #ff444440; }
+
+    /* Specs accordion */
+    .specs-item {
+      margin-bottom: .6rem;
+    }
+    .specs-category {
+      font-size: .7rem;
+      color: var(--gold3);
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      margin-bottom: .25rem;
+    }
+    .specs-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: .75rem;
+      padding: .1rem 0;
+      border-bottom: 1px solid #1a1a26;
+    }
+    .specs-row span:first-child { color: #888; }
+    .specs-row span:last-child  { color: var(--text); font-family: monospace; }
+
+    /* Score */
+    .score-big {
+      text-align: center;
+      font-size: 2.2rem;
+      font-weight: 900;
+      color: var(--gold);
+      text-shadow: 0 0 20px var(--gold2);
+      line-height: 1;
+    }
+    .score-label { text-align: center; font-size: .72rem; color: #666; margin-top: .2rem; }
+
+    /* ── Footer ───────────────────────────────────────────────── */
+    footer {
+      grid-area: footer;
+      background: #09090d;
+      border-top: 1px solid var(--border);
+      padding: .4rem 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      font-size: .72rem;
+      color: #555;
+    }
+    footer span { font-family: monospace; }
+    footer .tag  { color: var(--gold3); }
+
+    /* ── Scrollbar ────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 99px; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header>
+    <div class="snitch-icon"></div>
+    <h1>Snitch Voladora <span>— Mecanismo Real</span></h1>
+    <div class="badge">20 Hz · 3-D Physics</div>
+  </header>
+
+  <!-- ── Canvas ─────────────────────────────────────────────── -->
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="field"></canvas>
+
+    <div class="overlay-msg" id="overlayMsg">
+      <div class="big">⚡ ¡ATRAPADA!</div>
+      <div class="sub" id="overlaySub"></div>
+      <button class="primary" style="margin-top:1.2rem;pointer-events:auto;max-width:180px"
+              onclick="resetGame()">Jugar de nuevo</button>
+    </div>
+
+    <div class="controls-hint">
+      <span class="key">W</span><span class="key">A</span>
+      <span class="key">S</span><span class="key">D</span>
+      <span style="font-size:.72rem;color:#555;margin:0 .3rem">mover</span>
+      <span class="key">Q</span><span class="key">E</span>
+      <span style="font-size:.72rem;color:#555;margin:0 .3rem">altura</span>
+      <span class="key">Clic</span>
+      <span style="font-size:.72rem;color:#555">atrapar</span>
+    </div>
+  </div>
+
+  <!-- ── Sidebar ────────────────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <!-- Puntuacion -->
+    <section>
+      <div class="section-title">Puntuacion</div>
+      <div class="score-big" id="scoreVal">0</div>
+      <div class="score-label">puntos · <span id="nearMissCount">0</span> casi-capturas</div>
+    </section>
+
+    <!-- Estado -->
+    <section>
+      <div class="section-title">Estado</div>
+      <div class="status-bar">
+        <div class="dot" id="statusDot"></div>
+        <span id="statusText">Libre</span>
+      </div>
+    </section>
+
+    <!-- Telemetria -->
+    <section>
+      <div class="section-title">Telemetria Snitch</div>
+      <div class="telem-grid">
+        <div class="telem-item">
+          <label>Pos X</label>
+          <div class="val gold" id="tPosX">0.00 m</div>
+        </div>
+        <div class="telem-item">
+          <label>Pos Y (alt)</label>
+          <div class="val gold" id="tPosY">0.00 m</div>
+        </div>
+        <div class="telem-item">
+          <label>Pos Z</label>
+          <div class="val gold" id="tPosZ">0.00 m</div>
+        </div>
+        <div class="telem-item">
+          <label>Velocidad</label>
+          <div class="val cyan" id="tVel">0.00 m/s</div>
+        </div>
+        <div class="telem-item">
+          <label>Distancia</label>
+          <div class="val white" id="tDist">0.00 m</div>
+        </div>
+        <div class="telem-item">
+          <label>Dist. jugador</label>
+          <div class="val" id="tPlayerDist">0.00 m</div>
+        </div>
+        <div class="telem-item">
+          <label>Tick</label>
+          <div class="val white" id="tTick">0</div>
+        </div>
+        <div class="telem-item">
+          <label>Tiempo</label>
+          <div class="val white" id="tTime">0.0 s</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Fuerzas activas -->
+    <section>
+      <div class="section-title">Fuerzas Activas</div>
+      <div class="force-row">
+        <span class="force-label">Deambulacion</span>
+        <div class="force-bar-bg"><div class="force-bar-fill" id="fWander" style="background:#FFD700;width:0%"></div></div>
+        <span class="force-val" id="fWanderV">0.0</span>
+      </div>
+      <div class="force-row">
+        <span class="force-label">Hover</span>
+        <div class="force-bar-bg"><div class="force-bar-fill" id="fHover" style="background:#44ddff;width:0%"></div></div>
+        <span class="force-val" id="fHoverV">0.0</span>
+      </div>
+      <div class="force-row">
+        <span class="force-label">Evasion</span>
+        <div class="force-bar-bg"><div class="force-bar-fill" id="fEvasion" style="background:#ff4444;width:0%"></div></div>
+        <span class="force-val" id="fEvasionV">0.0</span>
+      </div>
+      <div class="force-row">
+        <span class="force-label">Limites</span>
+        <div class="force-bar-bg"><div class="force-bar-fill" id="fBound" style="background:#aa44ff;width:0%"></div></div>
+        <span class="force-val" id="fBoundV">0.0</span>
+      </div>
+      <div class="force-row">
+        <span class="force-label">Aleteo</span>
+        <div class="force-bar-bg"><div class="force-bar-fill" id="fFlap" style="background:#ff8844;width:0%"></div></div>
+        <span class="force-val" id="fFlapV">0.0</span>
+      </div>
+    </section>
+
+    <!-- Controles -->
+    <section>
+      <div class="section-title">Control Jugador</div>
+      <div class="btn-grid">
+        <div class="gap"></div>
+        <button class="ctrl" id="btnW" onclick="movePlayer(0,-1)">▲ W</button>
+        <div class="gap"></div>
+        <button class="ctrl" id="btnA" onclick="movePlayer(-1,0)">◀ A</button>
+        <button class="ctrl" id="btnS" onclick="movePlayer(0,1)">▼ S</button>
+        <button class="ctrl" id="btnD" onclick="movePlayer(1,0)">▶ D</button>
+      </div>
+      <div class="btn-row">
+        <button class="ctrl" onclick="movePlayerY(0.5)">▲ Q Subir</button>
+        <button class="ctrl" onclick="movePlayerY(-0.5)">▼ E Bajar</button>
+      </div>
+      <div class="btn-row" style="margin-top:.5rem">
+        <button class="primary" onclick="attemptCatch()">⚡ Atrapar (Espacio)</button>
+      </div>
+      <div class="btn-row">
+        <button class="primary danger" onclick="resetGame()">↺ Reiniciar</button>
+      </div>
+    </section>
+
+    <!-- Specs hardware -->
+    <section>
+      <div class="section-title">Hardware Real</div>
+      <div class="specs-item">
+        <div class="specs-category">Estructura</div>
+        <div class="specs-row"><span>Diámetro</span><span>35 mm</span></div>
+        <div class="specs-row"><span>Peso total</span><span>&lt; 28 g</span></div>
+        <div class="specs-row"><span>Material</span><span>PLA + pintura Au</span></div>
+      </div>
+      <div class="specs-item">
+        <div class="specs-category">Propulsión</div>
+        <div class="specs-row"><span>Motores</span><span>4× coreless 7mm</span></div>
+        <div class="specs-row"><span>Hélices</span><span>55 mm bipaleta</span></div>
+        <div class="specs-row"><span>Empuje</span><span>120 g (4.3:1)</span></div>
+      </div>
+      <div class="specs-item">
+        <div class="specs-category">Electrónica</div>
+        <div class="specs-row"><span>CPU</span><span>ESP32-S3</span></div>
+        <div class="specs-row"><span>IMU</span><span>MPU-6050 6-DOF</span></div>
+        <div class="specs-row"><span>Proximidad</span><span>VL53L1X ToF 4m</span></div>
+        <div class="specs-row"><span>Captura</span><span>4× FSR 402</span></div>
+        <div class="specs-row"><span>Radio</span><span>BLE 5.0</span></div>
+      </div>
+      <div class="specs-item">
+        <div class="specs-category">Energía</div>
+        <div class="specs-row"><span>Batería</span><span>LiPo 1S 300 mAh</span></div>
+        <div class="specs-row"><span>Autonomía hover</span><span>~60 s</span></div>
+        <div class="specs-row"><span>Autonomía evasión</span><span>~40 s</span></div>
+        <div class="specs-row"><span>Carga</span><span>USB-C 5V/1A</span></div>
+      </div>
+      <div class="specs-item">
+        <div class="specs-category">Algoritmo (este módulo)</div>
+        <div class="specs-row"><span>Frecuencia</span><span>20 Hz</span></div>
+        <div class="specs-row"><span>Radio evasión</span><span>2.0 m</span></div>
+        <div class="specs-row"><span>Radio captura</span><span>0.3 m</span></div>
+        <div class="specs-row"><span>Vel. máx.</span><span>6.0 m/s</span></div>
+        <div class="specs-row"><span>Coste est.</span><span>~ $45 USD</span></div>
+      </div>
+    </section>
+
+  </aside>
+
+  <!-- ── Footer ─────────────────────────────────────────────── -->
+  <footer>
+    <span><span class="tag">Jarvis</span> · Flying Snitch Mechanism</span>
+    <span id="ftTick">tick: 0</span>
+    <span id="ftPos">snitch: (0,0,0)</span>
+    <span id="ftPlayer">player: (0,0,0)</span>
+    <span style="margin-left:auto">ESP32-S3 · MPU-6050 · VL53L1X · BLE 5.0</span>
+  </footer>
+
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     JavaScript — Physics + Rendering
+════════════════════════════════════════════════════════════ -->
+<script>
+"use strict";
+
+/* ── Vec3 ────────────────────────────────────────────────────── */
+class Vec3 {
+  constructor(x=0,y=0,z=0){ this.x=x; this.y=y; this.z=z; }
+  add(v){ return new Vec3(this.x+v.x, this.y+v.y, this.z+v.z); }
+  sub(v){ return new Vec3(this.x-v.x, this.y-v.y, this.z-v.z); }
+  mul(s){ return new Vec3(this.x*s, this.y*s, this.z*s); }
+  mag(){ return Math.sqrt(this.x**2+this.y**2+this.z**2); }
+  norm(){ const m=this.mag(); return m<1e-9?new Vec3():this.mul(1/m); }
+  clamp(max){ const m=this.mag(); return m>max?this.norm().mul(max):new Vec3(this.x,this.y,this.z); }
+  clone(){ return new Vec3(this.x,this.y,this.z); }
+}
+
+/* ── Physics ─────────────────────────────────────────────────── */
+const FIELD   = 10.0;
+const HOVER_H = 1.5;
+const MAX_V   = 6.0;
+const MAX_A   = 8.0;
+const EVASION_R = 2.0;
+const CATCH_R   = 0.3;
+const NEAR_R    = 0.8;
+const DRAG      = 0.85;
+const DT        = 0.05;
+const FLAP_P    = 0.15;
+
+let snitch = {};
+let player = new Vec3(0, 1.5, 0);
+let gameOver = false;
+let score = 0;
+let nearMisses = 0;
+let startTime = performance.now();
+let lastForces = { wander:0, hover:0, evasion:0, bound:0, flap:0 };
+
+function rnd(a,b){ return a + Math.random()*(b-a); }
+
+function initSnitch(){
+  snitch = {
+    pos: new Vec3(rnd(-2,2), rnd(1.2,2.5), rnd(-2,2)),
+    vel: new Vec3(rnd(-1,1), rnd(-.3,.3), rnd(-1,1)),
+    noiseTarget: null,
+    noiseTimer: 0,
+    evading: false,
+    ticks: 0,
+    totalDist: 0,
+  };
+  snitch.noiseTarget = randomTarget();
+}
+
+function randomTarget(){
+  return new Vec3(rnd(-FIELD*.7,FIELD*.7), rnd(.8,3.5), rnd(-FIELD*.7,FIELD*.7));
+}
+
+function wanderForce(s){
+  s.noiseTimer += DT;
+  if(s.noiseTimer > rnd(1.5,4.0)){ s.noiseTarget=randomTarget(); s.noiseTimer=0; }
+  return s.noiseTarget.sub(s.pos).norm().mul(rnd(1.0,3.0));
+}
+
+function hoverForce(s){
+  return new Vec3(0, (HOVER_H - s.pos.y) * 3.0, 0);
+}
+
+function evasionForce(s, p){
+  const to = p.sub(s.pos);
+  const d  = to.mag();
+  if(d > EVASION_R || d < 1e-6){ s.evading=false; return new Vec3(); }
+  s.evading = true;
+  const flee = s.pos.sub(p).norm();
+  const intensity = (EVASION_R / Math.max(d, 0.1)) ** 2;
+  return flee.mul(intensity * MAX_A);
+}
+
+function boundaryForce(s){
+  const f = new Vec3();
+  for(const a of ['x','z']){
+    const v = s.pos[a];
+    if(v > FIELD)       f[a] = -(v-FIELD)*5;
+    else if(v < -FIELD) f[a] = (-FIELD-v)*5;
+  }
+  if(s.pos.y < 0.3)    f.y += (0.3-s.pos.y)*10;
+  else if(s.pos.y>5.0) f.y -= (s.pos.y-5.0)*5;
+  return f;
+}
+
+function flapForce(){
+  if(Math.random() < FLAP_P)
+    return new Vec3(rnd(-4,4), rnd(-1,2), rnd(-4,4));
+  return new Vec3();
+}
+
+function tickSnitch(s, p){
+  const fw = wanderForce(s);
+  const fh = hoverForce(s);
+  const fe = evasionForce(s, p);
+  const fb = boundaryForce(s);
+  const ff = flapForce();
+
+  lastForces.wander  = fw.mag();
+  lastForces.hover   = fh.mag();
+  lastForces.evasion = fe.mag();
+  lastForces.bound   = fb.mag();
+  lastForces.flap    = ff.mag();
+
+  const accel = fw.add(fh).add(fe).add(fb).add(ff).clamp(MAX_A);
+  const prev  = s.pos.clone();
+  s.vel = s.vel.add(accel.mul(DT)).clamp(MAX_V).mul(DRAG);
+  s.pos = s.pos.add(s.vel.mul(DT));
+  s.totalDist += s.pos.sub(prev).mag();
+  s.ticks++;
+}
+
+/* ── Player movement ─────────────────────────────────────────── */
+function movePlayer(dx, dz){ player.x += dx; player.z += dz; }
+function movePlayerY(dy){ player.y = Math.max(0.1, player.y + dy); }
+
+function attemptCatch(){
+  if(gameOver) return;
+  const d = snitch.pos.sub(player).mag();
+  if(d <= CATCH_R){
+    gameOver = true;
+    const elapsed = (performance.now()-startTime)/1000;
+    score += Math.round(1000 / elapsed * (nearMisses+1));
+    document.getElementById('scoreVal').textContent = score;
+    const sub = document.getElementById('overlaySub');
+    sub.textContent = `En ${elapsed.toFixed(1)}s · ${snitch.ticks} ticks · ${snitch.totalDist.toFixed(1)}m recorridos`;
+    document.getElementById('overlayMsg').classList.add('show');
+  } else if(d <= NEAR_R){
+    nearMisses++;
+    document.getElementById('nearMissCount').textContent = nearMisses;
+  }
+}
+
+function resetGame(){
+  initSnitch();
+  player = new Vec3(0,1.5,0);
+  gameOver = false;
+  nearMisses = 0;
+  startTime = performance.now();
+  document.getElementById('overlayMsg').classList.remove('show');
+  document.getElementById('nearMissCount').textContent = '0';
+}
+
+/* ── Canvas rendering ────────────────────────────────────────── */
+const canvas = document.getElementById('field');
+const ctx    = canvas.getContext('2d');
+let   trailPoints = [];
+
+function resize(){
+  const wrap = document.getElementById('canvasWrap');
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* Isometric-ish projection: XZ plane, Y encoded as glow */
+function project(v){
+  const W = canvas.width, H = canvas.height;
+  const px = ((v.x + FIELD) / (2*FIELD)) * W;
+  const py = ((v.z + FIELD) / (2*FIELD)) * H;
+  return {px, py};
+}
+
+function drawGrid(){
+  const W = canvas.width, H = canvas.height;
+  ctx.strokeStyle = 'rgba(40,40,80,0.6)';
+  ctx.lineWidth = 0.5;
+  const cells = 10;
+  for(let i=0;i<=cells;i++){
+    const x = (i/cells)*W;
+    const y = (i/cells)*H;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+}
+
+function drawTrail(){
+  if(trailPoints.length < 2) return;
+  for(let i=1;i<trailPoints.length;i++){
+    const a = trailPoints[i-1], b = trailPoints[i];
+    const alpha = (i/trailPoints.length)*0.5;
+    ctx.beginPath();
+    ctx.strokeStyle = `rgba(255,200,0,${alpha})`;
+    ctx.lineWidth = 1.5 * (i/trailPoints.length);
+    ctx.moveTo(a.px, a.py);
+    ctx.lineTo(b.px, b.py);
+    ctx.stroke();
+  }
+}
+
+function drawSnitch(sp){
+  const {px,py} = project(snitch.pos);
+  const altFactor = snitch.pos.y / 3.0;   // 0..1 height glow
+  const r = 10 + altFactor*4;
+
+  // Evasion ring
+  if(snitch.evading){
+    ctx.beginPath();
+    ctx.arc(px,py, r+12, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,60,60,0.4)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // Glow
+  const grd = ctx.createRadialGradient(px,py,0, px,py,r*3);
+  grd.addColorStop(0, `rgba(255,220,0,${0.3+altFactor*0.2})`);
+  grd.addColorStop(1, 'rgba(255,200,0,0)');
+  ctx.beginPath(); ctx.arc(px,py,r*3,0,Math.PI*2);
+  ctx.fillStyle=grd; ctx.fill();
+
+  // Body
+  const bodyGrd = ctx.createRadialGradient(px-r*.3,py-r*.3,0, px,py,r);
+  bodyGrd.addColorStop(0,'#fffaaa');
+  bodyGrd.addColorStop(0.4,'#FFD700');
+  bodyGrd.addColorStop(1,'#B8860B');
+  ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+  ctx.fillStyle=bodyGrd; ctx.fill();
+
+  // Wings (animated)
+  const t = performance.now()*0.008;
+  const wingW = 22, wingH = 8;
+  ctx.save(); ctx.translate(px,py); ctx.rotate(Math.sin(t)*0.25);
+  ctx.beginPath();
+  ctx.ellipse(-r-wingW*.5, -2, wingW, wingH, -0.3, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,240,180,0.35)';
+  ctx.strokeStyle= 'rgba(255,215,0,0.6)';
+  ctx.lineWidth  = 1;
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+
+  ctx.save(); ctx.translate(px,py); ctx.rotate(-Math.sin(t)*0.25);
+  ctx.beginPath();
+  ctx.ellipse(r+wingW*.5, -2, wingW, wingH, 0.3, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,240,180,0.35)';
+  ctx.strokeStyle= 'rgba(255,215,0,0.6)';
+  ctx.lineWidth  = 1;
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function drawPlayer(){
+  const {px,py} = project(player);
+
+  // Catch radius ring
+  const catchPx = (CATCH_R/(2*FIELD)) * canvas.width * 2;
+  ctx.beginPath(); ctx.arc(px,py,catchPx,0,Math.PI*2);
+  ctx.strokeStyle='rgba(68,221,255,0.3)'; ctx.lineWidth=1.5; ctx.stroke();
+
+  // Evasion radius ring (dimmer)
+  const evasPx = (EVASION_R/(2*FIELD)) * canvas.width * 2;
+  ctx.beginPath(); ctx.arc(px,py,evasPx,0,Math.PI*2);
+  ctx.strokeStyle='rgba(68,221,255,0.08)'; ctx.lineWidth=1; ctx.stroke();
+
+  // Player marker
+  ctx.fillStyle='rgba(68,221,255,0.15)';
+  ctx.beginPath(); ctx.arc(px,py,14,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#44ddff'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(px,py,14,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle='#44ddff';
+  ctx.font='bold 11px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('P', px, py);
+
+  // Height label
+  ctx.fillStyle='rgba(68,221,255,0.6)';
+  ctx.font='9px monospace'; ctx.textAlign='center';
+  ctx.fillText(`y:${player.y.toFixed(1)}`, px, py+22);
+}
+
+function drawDistLine(){
+  const sp = project(snitch.pos);
+  const pp = project(player);
+  const d  = snitch.pos.sub(player).mag();
+  const alpha = Math.max(0, 1 - d/EVASION_R);
+  if(alpha < 0.05) return;
+  ctx.beginPath();
+  ctx.setLineDash([4,4]);
+  ctx.moveTo(pp.px,pp.py); ctx.lineTo(sp.px,sp.py);
+  ctx.strokeStyle = `rgba(255,100,100,${alpha*0.5})`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/* ── UI Updates ──────────────────────────────────────────────── */
+function setBar(id, valId, val, max){
+  const pct = Math.min(100, (val/max)*100);
+  document.getElementById(id).style.width = pct+'%';
+  document.getElementById(valId).textContent = val.toFixed(1);
+}
+
+function updateHUD(){
+  const elapsed = (performance.now()-startTime)/1000;
+  const playerDist = snitch.pos.sub(player).mag();
+
+  document.getElementById('tPosX').textContent  = snitch.pos.x.toFixed(2)+' m';
+  document.getElementById('tPosY').textContent  = snitch.pos.y.toFixed(2)+' m';
+  document.getElementById('tPosZ').textContent  = snitch.pos.z.toFixed(2)+' m';
+  document.getElementById('tVel').textContent   = snitch.vel.mag().toFixed(2)+' m/s';
+  document.getElementById('tDist').textContent  = snitch.totalDist.toFixed(2)+' m';
+  document.getElementById('tTick').textContent  = snitch.ticks;
+  document.getElementById('tTime').textContent  = elapsed.toFixed(1)+' s';
+
+  const el = document.getElementById('tPlayerDist');
+  el.textContent = playerDist.toFixed(2)+' m';
+  el.className   = 'val '+(playerDist<1.5?'red':playerDist<3?'gold':'green');
+
+  const dot  = document.getElementById('statusDot');
+  const stxt = document.getElementById('statusText');
+  if(snitch.evading){
+    dot.classList.add('evading');
+    stxt.textContent='⚠ Evadiendo';
+    stxt.style.color='#ff4444';
+  } else {
+    dot.classList.remove('evading');
+    stxt.textContent='Libre';
+    stxt.style.color='#44ff88';
+  }
+
+  setBar('fWander','fWanderV',   lastForces.wander,  MAX_A);
+  setBar('fHover', 'fHoverV',    lastForces.hover,   MAX_A);
+  setBar('fEvasion','fEvasionV', lastForces.evasion, MAX_A);
+  setBar('fBound', 'fBoundV',    lastForces.bound,   MAX_A);
+  setBar('fFlap',  'fFlapV',     lastForces.flap,    MAX_A);
+
+  document.getElementById('ftTick').textContent   = 'tick: '+snitch.ticks;
+  document.getElementById('ftPos').textContent    =
+    `snitch: (${snitch.pos.x.toFixed(1)},${snitch.pos.y.toFixed(1)},${snitch.pos.z.toFixed(1)})`;
+  document.getElementById('ftPlayer').textContent =
+    `player: (${player.x.toFixed(1)},${player.y.toFixed(1)},${player.z.toFixed(1)})`;
+}
+
+/* ── Main loop ───────────────────────────────────────────────── */
+let lastPhysics = 0;
+const PHYSICS_INTERVAL = DT * 1000; // 50ms = 20Hz
+
+function loop(ts){
+  requestAnimationFrame(loop);
+
+  // Physics step (decoupled from render fps)
+  if(!gameOver && ts - lastPhysics >= PHYSICS_INTERVAL){
+    tickSnitch(snitch, player);
+    lastPhysics = ts;
+
+    // Trail
+    const sp = project(snitch.pos);
+    trailPoints.push(sp);
+    if(trailPoints.length > 60) trailPoints.shift();
+
+    // Near-miss detection
+    const d = snitch.pos.sub(player).mag();
+    if(d <= NEAR_R && d > CATCH_R){
+      nearMisses++;
+      document.getElementById('nearMissCount').textContent = nearMisses;
+    }
+  }
+
+  // Render
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawGrid();
+  drawDistLine();
+  drawTrail();
+  drawPlayer();
+  drawSnitch();
+
+  // Axis labels
+  ctx.fillStyle='rgba(80,80,120,0.8)'; ctx.font='10px monospace'; ctx.textAlign='left';
+  ctx.fillText('Vista XZ (planta) — Y=altura codificada en brillo', 8, canvas.height-8);
+
+  updateHUD();
+}
+
+/* ── Keyboard ────────────────────────────────────────────────── */
+const SPEED = 0.8;
+const keys  = new Set();
+
+document.addEventListener('keydown', e => {
+  if(gameOver && e.key !== 'r') return;
+  switch(e.key.toLowerCase()){
+    case 'w': movePlayer(0,-SPEED);  document.getElementById('btnW').classList.add('active'); break;
+    case 's': movePlayer(0, SPEED);  document.getElementById('btnS').classList.add('active'); break;
+    case 'a': movePlayer(-SPEED,0);  document.getElementById('btnA').classList.add('active'); break;
+    case 'd': movePlayer( SPEED,0);  document.getElementById('btnD').classList.add('active'); break;
+    case 'q': movePlayerY( 0.5); break;
+    case 'e': movePlayerY(-0.5); break;
+    case ' ': e.preventDefault(); attemptCatch(); break;
+    case 'r': resetGame(); break;
+  }
+});
+document.addEventListener('keyup', e => {
+  switch(e.key.toLowerCase()){
+    case 'w': document.getElementById('btnW').classList.remove('active'); break;
+    case 's': document.getElementById('btnS').classList.remove('active'); break;
+    case 'a': document.getElementById('btnA').classList.remove('active'); break;
+    case 'd': document.getElementById('btnD').classList.remove('active'); break;
+  }
+});
+
+/* Click-to-catch on canvas */
+canvas.addEventListener('click', e => {
+  if(gameOver) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const my = (e.clientY - rect.top)  * (canvas.height/ rect.height);
+  const W=canvas.width, H=canvas.height;
+  player.x = (mx/W)*(2*FIELD) - FIELD;
+  player.z = (my/H)*(2*FIELD) - FIELD;
+  attemptCatch();
+});
+
+/* ── Start ───────────────────────────────────────────────────── */
+initSnitch();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
