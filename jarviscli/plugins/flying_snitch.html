@@ -90,6 +90,30 @@
       letter-spacing: .06em;
     }
 
+    .btn-download {
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      background: linear-gradient(135deg, #2a1800, #1a1000);
+      border: 1px solid var(--gold3);
+      color: var(--gold);
+      font-size: .78rem;
+      font-weight: 600;
+      padding: .3rem .8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      letter-spacing: .04em;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+    .btn-download:hover {
+      background: linear-gradient(135deg, #3a2200, #2a1800);
+      border-color: var(--gold);
+      box-shadow: 0 0 14px #ffd70040;
+    }
+    .btn-download svg { flex-shrink: 0; }
+
     /* ── Canvas area ──────────────────────────────────────────── */
     .canvas-wrap {
       grid-area: canvas;
@@ -353,6 +377,13 @@
     <div class="snitch-icon"></div>
     <h1>Snitch Voladora <span>— Mecanismo Real</span></h1>
     <div class="badge">20 Hz · 3-D Physics</div>
+    <button class="btn-download" onclick="downloadSelf()" title="Descargar este archivo HTML">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 12l-4.5-4.5 1.06-1.06L7 8.88V2h2v6.88l2.44-2.44 1.06 1.06L8 12z"/>
+        <path d="M2 13h12v1.5H2V13z"/>
+      </svg>
+      Descargar HTML
+    </button>
   </header>
 
   <!-- ── Canvas ─────────────────────────────────────────────── -->
@@ -959,6 +990,20 @@ canvas.addEventListener('click', e => {
 /* ── Start ───────────────────────────────────────────────────── */
 initSnitch();
 requestAnimationFrame(loop);
+
+/* ── Download self ───────────────────────────────────────────── */
+function downloadSelf(){
+  const src  = document.documentElement.outerHTML;
+  const blob = new Blob(['<!DOCTYPE html>\n' + src], { type: 'text/html;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'snitch_voladora.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 </script>
 </body>
 </html>
